@@ -1,6 +1,4 @@
-#!/usr/bin/python
-
-'''
+"""
 
  HashcatWrapper.py - Python wrapper for hashcat and oclHashcat
  VERSION 0.5 BETA
@@ -37,7 +35,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
 
- '''
+ """
 
 import os
 import sys
@@ -48,6 +46,7 @@ import platform
 import traceback
 from threading import Thread
 import struct
+import logging
 from collections import namedtuple, OrderedDict
 from Queue import Queue, Empty
 from subprocess import Popen,PIPE
@@ -217,7 +216,6 @@ class oclHashcatWrapper(object):
     }
     
     cmd_short_switch = {
-    
             'attack-mode' : 'a',
             'hash-type' : 'm',
             'version' : 'V',
@@ -282,59 +280,51 @@ class oclHashcatWrapper(object):
     ]
     
     def __init__(self, bin_dir=".", gcard_type="cuda", verbose=False):
-    
-        self.verbose = verbose
+        if verbose:
+            logging.basicConfig(level=logging.INFO)
+
         self.reset()
         self.bin_dir = bin_dir							# Directory where oclHashcat is installed
         self.bits = "32"
-        
-        if self.verbose: print "[*] Checking architecture:",
-        
+
         if sys.maxsize > 2**32: 
             self.bits = "64"
-            
         else:
             self.bits = "32"
-        
-        if self.verbose: print self.bits+" bit"
-        if self.verbose: print "[*] Checking OS type:",
+
+        logging.info("[*] Checking architecture:" + self.bits + " bit")
+        msg = "[*] Checking OS type: "
         
         if "Win" in platform.system():
-        
-            if self.verbose: print "Windows"
+            logging.info(msg + "Windows")
             
             if gcard_type.lower() == "cuda":
                 self.cmd = "cudaHashcat"+self.bits + " "
-                if self.verbose: print "[*] Using CUDA version"
-                
+                logging.info("[*] Using CUDA version")
             else:
                 self.cmd = "oclHashcat"+self.bits + " "
-                if self.verbose: print "[*] Using OCL version"
+                logging.info("[*] Using OCL version")
                 
-            if self.verbose: print "[*] Using cmd: " + self.cmd
+            logging.info("[*] Using cmd: " + self.cmd)
         else:
-        
-            if self.verbose: print "Linux"
+            logging.info("Linux")
             
             if gcard_type.lower() == "cuda":
                 self.cmd = "./cudaHashcat"+self.bits + ".bin"
-                if self.verbose: print "[*] Using CUDA version"
-            
+                logging.info("[*] Using CUDA version")
             else:
                 self.cmd = "./oclHashcat"+self.bits  + ".bin"
-                if self.verbose: print "[*] Using OCL version"
+                logging.info("[*] Using OCL version")
 
-            if self.verbose: print "[*] Using cmd: " + self.cmd
+            logging.info("[*] Using cmd: " + self.cmd)
                             
     def __enter__(self):
         return self
         
     def __exit__(self, type, value, traceback):
-        
         self.stop()
             
     def __setattr__(self, name, value):
-
         try:
             if not value == self.defaults[name] and name not in self.ignore_vars:		
                 self.defaults_changed.append(name)
@@ -346,7 +336,6 @@ class oclHashcatWrapper(object):
             object.__setattr__(self,name,value)
             
     def reset(self):
-    
         if self.is_running():
             self.stop()
             self.stdout_thread = None
@@ -434,69 +423,60 @@ class oclHashcatWrapper(object):
         if self.verbose: print "[*] Variables reset to defaults"
         
     def get_restore_stats(self, restore_file_path=None):
-    
-        '''
+        """
             Now retrieving the restore file using struct, namedtuples and OrderedDict.
             There is a pointer to argv which differs in size between 32-/64 bit systems.
             With the current code you can't correctly parse a restore file created with
             the 32 bit version of oclHashcat on a 64 bit system (and vice versa).
             Any ideas/patches are welcome.
-        '''
+        """
        
         if not restore_file_path:
             restore_file_path = os.path.join(self.bin_dir, self.session + ".restore")
-            
         
         try:
-	  # Get stats from restore file
-	  with open(restore_file_path, "r") as restore_file:
+            # Get stats from restore file
+            with open(restore_file_path, "r") as restore_file:
+                try:
+                    self.restore_struct = restore_file.read()
+                except Exception as FileReadError:
+                    logging.error("[-] Error reading restore file")
+                    return
 
-	      try:
-		
-		self.restore_struct = restore_file.read()
-		
-	      except Exception as FileReadError:
-		
-		if self.verbose: "[-] Error reading restore file"
-		return
-	
-	      if self.bits == "64":
-	          fmt = 'I256sIIIQIQ%ds' % (len(self.restore_struct) - 296)
-	      else: # 32 bit system
-	          fmt = 'I256sIIIQII%ds' % (len(self.restore_struct) - 288)
-	      struct_tuple = namedtuple('struct_tuple', 'version_bin cwd pid dictpos maskpos pw_cur argc argv_pointer argv')
-	      struct_tuple = struct_tuple._make(struct.unpack(fmt, self.restore_struct))
-	      self.stats = OrderedDict(zip(struct_tuple._fields, struct_tuple))
-	      self.stats['cwd'] = self.stats['cwd'].rstrip('\0')
-	      
-	      try:
-		  self.stats['argv'] = self.stats['argv'].split('\n')
-		  self.stats['argv'][0] = os.path.basename(self.stats['argv'][0]).split('.')[0]
-	      
-	      except Exception as ValueError:
-		  self.stats['argv'][0] = "oclHashcat"
+                if self.bits == "64":
+                    fmt = 'I256sIIIQIQ%ds' % (len(self.restore_struct) - 296)
+                else: # 32 bit system
+                    fmt = 'I256sIIIQII%ds' % (len(self.restore_struct) - 288)
+
+                struct_tuple = namedtuple('struct_tuple', 'version_bin cwd pid dictpos maskpos pw_cur argc argv_pointer argv')
+                struct_tuple = struct_tuple._make(struct.unpack(fmt, self.restore_struct))
+                self.stats = OrderedDict(zip(struct_tuple._fields, struct_tuple))
+                self.stats['cwd'] = self.stats['cwd'].rstrip('\0')
+
+                try:
+                    self.stats['argv'] = self.stats['argv'].split('\n')
+                    self.stats['argv'][0] = os.path.basename(self.stats['argv'][0]).split('.')[0]
+                except Exception as ValueError:
+                    self.stats['argv'][0] = "oclHashcat"
 		  
-	except IOError as FileError:
-	  if self.verbose: print "[-] Restore file not found!"	
+        except IOError as FileError:
+            logging.info("[-] Restore file not found!")
+
             
     def get_hashes(self, output_file_path=None, fields=(), sep=None):
-
-        if output_file_path == None:
-            
-            if self.outfile == None:
+        if output_file_path is None:
+            if self.outfile is None:
                 return
-            
             else:
                 output_file_path = self.outfile
         
-        if sep == None:
+        if sep is None:
             sep = self.separator
         
         try:
             # Get cracked hashes
             with open(output_file_path, "rb") as output_file:
-                
-                if self.verbose: print "Reading output file: " + output_file_path
+                logging.info("Reading output file: " + output_file_path)
                 results = [record.rstrip('\n\r').rsplit(sep) for record in output_file.readlines()]
         
             if len(fields) == 0 and len(results) > 0 or len(results) > 0 and len(fields) != len(results[0]):
@@ -516,31 +496,28 @@ class oclHashcatWrapper(object):
                 return [{}]
                 
         except IOError as FileError:
-                    
             return [{}]
+
             
     def enqueue_output(self, out, queue):
-    
         for line in iter(out.readline, b''):
-        
             queue.put(line)
             out.flush()
             
         out.close()
+
                     
-    def stdout(self):
-        
+    def stdout(self):        
         out = ""
         try:
             out = self.q.get_nowait()
-            
         except Empty:
             out = ""
         
         return out.rstrip()
+
         
-    def stderr(self):
-        
+    def stderr(self):        
         out = ""
         try:
             out = self.eq.get_nowait()
@@ -551,17 +528,16 @@ class oclHashcatWrapper(object):
         return out.rstrip()
 
         
-    def start(self, cmd=None, argv=[]):
-    
-        if cmd == None:
+    def start(self, cmd=None, argv=[]):    
+        if cmd is None:
             cmd = self.cmd
 
-        if self.hashcat != None and self.is_running():
+        if self.hashcat is not None and self.is_running():
             self.stop()
             
         run_cmd = [os.path.join(self.bin_dir,cmd)] + argv		# Create full path to main binary
         
-        if self.verbose: print "[+] STDIN: " + ' '.join(run_cmd)
+        logging.info("[+] STDIN: " + ' '.join(run_cmd))
         
         self.hashcat = Popen(run_cmd, stdout=PIPE, stdin=PIPE, stderr=PIPE, bufsize=1, close_fds=ON_POSIX)
         
@@ -575,47 +551,41 @@ class oclHashcatWrapper(object):
         
         try:
             stdout_thread.start()
-            if self.verbose: print "[*] STDOUT thread started"
-            
+            logging.info("[*] STDOUT thread started")
         except Exception as e:
-            if self.verbose: print "[!] Could not start STDOUT thread"
+            logging.error("[!] Could not start STDOUT thread")
             
         try:
             stderr_thread.start()
-            if self.verbose: print "[*] STDERR thread started"
-            
+            logging.info("[*] STDERR thread started")
         except Exception as e:
-            if self.verbose: print "[!] Could not start STDERR thread"
-        
+            logging.error("[!] Could not start STDERR thread")
+
+
     def test(self, cmd=None, argv=[]):
-    
-        if cmd == None:
+        if cmd is None:
             cmd = self.cmd
         
         run_cmd = [os.path.join(self.bin_dir,cmd)] + argv		# Create full path to main binary
         
         if run_cmd and not None in run_cmd:
-	  
-	  print "--------- Hashcat CMD Test ---------"
-	  print ' '.join(run_cmd)
-	  print "------------------------------------"
-	  
-	else:
-	  if self.verbose: print "[-] None type in string. Required option missing"
-        
-    def straight(self, TEST=False):
+            print("--------- Hashcat CMD Test ---------")
+            print(' '.join(run_cmd))
+            print("------------------------------------")
+        else:
+            logging.info("[-] None type in string. Required option missing")
 
+
+    def straight(self, TEST=False):
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
         try:
             argv.insert(0, self.words_files[0])
-        
         except IndexError as EmptyListError:
             return
         
@@ -626,49 +596,40 @@ class oclHashcatWrapper(object):
         argv.insert(0, "-m")
         
         # Add rules if specified
-        if self.verbose: print "[*] (" + str(len(self.rules_files)) + ") Rules files specified. Verifying files..."
+        logging.info("[*] (" + str(len(self.rules_files)) + ") Rules files specified. Verifying files...")
         
         for rules in self.rules_files:
-            
             if not os.path.isabs(rules): rules = os.path.join(self.bin_dir,rules)
             
             if os.path.isfile(rules):
-            
-                if self.verbose: print "\t[+] " + rules + " Found!"
-                
+                logging.info("\t[+] " + rules + " Found!")
                 argv.append("-r")
                 argv.append(rules)
-        
             else:
-            
-                if self.verbose: print "\t[-] " + rules + " NOT Found!"
+                logging.info("\t[-] " + rules + " NOT Found!")
                 pass
         
-        
-        if self.verbose: print "[*] Starting Straight (0) attack"
+        logging.info("[*] Starting Straight (0) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
-        
-    def combinator(self, argv=[], TEST=False):
 
+
+    def combinator(self, argv=[], TEST=False):
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
         try:
             argv.insert(0, self.words_files[1])
             argv.insert(0, self.words_files[0])
-        
         except IndexError as EmptyListError:
             return
         
@@ -678,29 +639,26 @@ class oclHashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Combinator (1) attack"
+        logging.info("[*] Starting Combinator (1) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
-    
-    def brute_force(self, argv=[], TEST=False):
 
+
+    def brute_force(self, argv=[], TEST=False):
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
         try:
             argv.insert(0, self.words_files[0])
-        
         except IndexError as EmptyListError:
             return
         
@@ -710,39 +668,34 @@ class oclHashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Brute-Force (3) attack"
+        logging.info("[*] Starting Brute-Force (3) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
 
+
     def hybrid_dict_mask(self, argv=[], TEST=False):
-        
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
-        if self.masks_file == None and self.mask == None:
+        if self.masks_file is None and self.mask is None:
             return
-            
         else:
             if self.masks_file:
                 mask = self.masks_file
-                
             else:
                 mask = self.mask
     
         try:
             argv.insert(0, mask)
-            
         except IndexError as EmptyListError:
             return
             
@@ -753,39 +706,34 @@ class oclHashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Hybrid dict + mask (6) attack"
+        logging.info("[*] Starting Hybrid dict + mask (6) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
-    
+
+
     def hybrid_mask_dict(self, argv=[], TEST=False):
-        
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
         try:
             argv.insert(0, self.words_files[0])
-        
         except IndexError as EmptyListError:
             return
         
-        if self.masks_file == None and self.mask == None:
+        if self.masks_file is None and self.mask is None:
             return
-            
         else:
             if self.masks_file:
                 mask = self.masks_file
-                
             else:
                 mask = self.mask
                 
@@ -796,60 +744,45 @@ class oclHashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Hybrid mask + dict (7) attack"
+        logging.info("[*] Starting Hybrid mask + dict (7) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
-        
+
+
     def stop(self):
-    
         RTCODE = self.get_RTCODE()
         if self.is_running():
-        
-            if self.verbose: print "[*] Stopping background process...",
+            msg = "[*] Stopping background process...",
             try:
-                
                 self.hashcat.kill()
-                
-                if self.verbose: print "[Done]"
-                
-            except Exception as ProcessException: 
-            
+                logging.info(msg + "[Done]")
+            except Exception as ProcessException:
                 if not RTCODE in (-2,-1,0,2):
-                
-                    if self.verbose: 
-                    
-                        print "[PROCESS EXCEPTION]"
-                        print "\t** This could have happened for several reasons **"
-                        print "\t1. GOOD: Process successfully completed before stop call"
-                        print "\t2. BAD: Process failed to run initially (likely path or argv error)"
-                        print "\t3. UGLY: Unknown - Check your running processes for a zombie"
-                    
+                    logging.error("[PROCESS EXCEPTION]")
+                    logging.error("\t** This could have happened for several reasons **")
+                    logging.error("\t1. GOOD: Process successfully completed before stop call")
+                    logging.error("\t2. BAD: Process failed to run initially (likely path or argv error)")
+                    logging.error("\t3. UGLY: Unknown - Check your running processes for a zombie")
                 else:
-                    if self.verbose: print "[Done]"
-    
+                    logging.info("[Done]")
         
-        if self.verbose: print "[*] Program exited with code: " + str(RTCODE)
+        logging.info("[*] Program exited with code: " + str(RTCODE))
+
         
     def is_running(self):
-
-        if self.get_RTCODE() == None:		# Return value of None indicates process hasn't terminated
-            
+        if self.get_RTCODE() is None:		# Return value of None indicates process hasn't terminated
             return True
-        
         else:
             return False
     
     
     def get_RTCODE(self):
-    
-        '''
-        
+        """
         status codes on exit:
         =====================
 
@@ -858,45 +791,33 @@ class oclHashcatWrapper(object):
          0 = cracked
          1 = exhausted 
          2 = aborted
- 
-        '''
+         """
     
         try:
             return self.hashcat.poll()
-            
         except Exception as e:
             return -99          # Hasn't been started
     
     
-    
     def find_code(self):	# Find the hashcat hash code
-    
         try:
-            
             # Returns the first code that matches the type text
             return str(self.hash_type_dict[difflib.get_close_matches(self.hash_type, self.hash_type_dict.keys())[0]])
-        
         except Exception as CodeNotFoundError:
             return 0
-        
-        return 0			# Return default MD5
+
             
     def str_from_code(self, code):	# Reverse lookup find code from string
-    
         for code_str in self.hash_type_dict:
-        
             if str(code).lower() == str(self.hash_type_dict[code_str]).lower():
-            
-                if self.verbose: print "[*] " + str(code_str) + " = " + str(self.hash_type_dict[code_str])
+                logging.info("[*] " + str(code_str) + " = " + str(self.hash_type_dict[code_str]))
                 return code_str
-        
-        else:
-            return "UNKNOWN"
+            else:
+                return "UNKNOWN"
         
     
     def build_args(self):
-        
-        if self.verbose: print "[*] Building argv"
+        logging.info("[*] Building argv")
         
         # Check if any defaults are changed
         argv = []
@@ -907,17 +828,13 @@ class oclHashcatWrapper(object):
             option = option.replace('_','-')			# Convert Python snake_style var to cmd line dash format
             
             if option in self.cmd_short_switch.keys():		# Use short switches if available
-            
-                if self.verbose: print "[*] Checking for short options"
+                logging.info("[*] Checking for short options")
                 option = "-" + self.cmd_short_switch[option]
                 argv.append(option)
                 argv.append(str(value))
-                
-            else: 
-            
+            else:
                 if option in self.cmd_equal_required:
                     argv.append("--" + option + "=" + str(value))
-                    
                 else:
                     argv.append("--" + option)
         
@@ -925,11 +842,10 @@ class oclHashcatWrapper(object):
         
 
     def clear_rules(self):
-    
         self.rules_files = []
-        
+
+
     def clear_words(self):
-    
         self.words_files = []
         
 '''
@@ -1123,68 +1039,57 @@ class HashcatWrapper(object):
         self.bin_dir = bin_dir							# Directory where Hashcat is installed
         bits = "32"
         
-        if self.verbose: print "[*] Checking architecture:",
+        msg = "[*] Checking architecture:"
         
         if sys.maxsize > 2**32: 
             bits = "64"
-            
         else:
             bits = "32"
 
         if bits == "32" and cpu_type != None:
-            print "[E] " + cpu_type + " is only supported on 64 bit!"
+            logging.error("[E] " + cpu_type + " is only supported on 64 bit!")
             sys.exit()
 
-        if self.verbose: print bits+" bit"
-        if self.verbose: print "[*] Checking OS type:",
+        logging.info(msg + bits+" bit")
+        msg = "[*] Checking OS type:"
 
         if "Win" in platform.system():
+            logging.info(msg + "Windows")
 
-            if self.verbose: print "Windows"
-
-            if cpu_type == None:
+            if cpu_type is None:
                 self.cmd = "hashcat-cli"+bits + " "
-                if self.verbose: print "[*] Using SSE2 version"
-
+                logging.info("[*] Using SSE2 version")
             elif cpu_type.lower() == "avx":
                 self.cmd = "hashcat-cliAVX "
-                if self.verbose: print "[*] Using AVX version"
-
+                logging.info("[*] Using AVX version")
             elif cpu_type.lower() == "xop":
                 self.cmd = "hashcat-cliXOP "
-                if self.verbose: print "[*] Using XOP version"
-
+                logging.info("[*] Using XOP version")
         else:
+            logging.info(msg + "Linux")
 
-            if self.verbose: print "Linux"
-
-            if cpu_type == None:
+            if cpu_type is None:
                 self.cmd = "hashcat-cli"+bits + ".bin"
-                if self.verbose: print "[*] Using SSE2 version"
-
+                logging.info("[*] Using SSE2 version")
             elif cpu_type.lower() == "avx":
                 self.cmd = "hashcat-cliAVX.bin"
-                if self.verbose: print "[*] Using AVX version"
-
+                logging.info("[*] Using AVX version")
             elif cpu_type.lower() == "xop":
                 self.cmd = "hashcat-cliXOP.bin"
-                if self.verbose: print "[*] Using XOP version"
+                logging.info("[*] Using XOP version")
 
-        if self.verbose: print "[*] Using cmd: " + self.cmd
+        logging.info("[*] Using cmd: " + self.cmd)
    
     def __enter__(self):
         return self
         
     def __exit__(self, type, value, traceback):
-        
         self.stop()
             
     def __setattr__(self, name, value):
-
         try:
             if not value == self.defaults[name] and name not in self.ignore_vars:		
                 self.defaults_changed.append(name)
-                
         except Exception as e:
             pass
         
@@ -1192,7 +1097,6 @@ class HashcatWrapper(object):
             object.__setattr__(self,name,value)
             
     def reset(self):
-
         if self.is_running():
             self.stop()
             self.stdout_thread = None
@@ -1248,19 +1152,16 @@ class HashcatWrapper(object):
         self.defaults = copy.deepcopy({key:vars(self)[key] for key in vars(self) if key != 'stdout_thread' or 'sterr_thread'})
         self.defaults_changed = []
         
-        if self.verbose: print "[*] Variables reset to defaults"
+        logging.info("[*] Variables reset to defaults")
         
     def get_hashes(self, output_file_path=None, fields=(), sep=None):
-
-        if output_file_path == None:
-            
-            if self.outfile == None:
+        if output_file_path is None:
+            if self.outfile is None:
                 return
-            
             else:
                 output_file_path = self.outfile
         
-        if sep == None:
+        if sep is None:
             sep = self.separator
         
         try:
@@ -1324,7 +1225,7 @@ class HashcatWrapper(object):
         
     def start(self, cmd=None, argv=[]):
     
-        if cmd == None:
+        if cmd is None:
             cmd = self.cmd
 
         if self.hashcat != None and self.is_running():
@@ -1346,21 +1247,19 @@ class HashcatWrapper(object):
         
         try:
             stdout_thread.start()
-            if self.verbose: print "[*] STDOUT thread started"
-            
+            logging.info("[*] STDOUT thread started")
         except Exception as e:
-            if self.verbose: print "[!] Could not start STDOUT thread"
+            logging.error("[!] Could not start STDOUT thread")
             
         try:
             stderr_thread.start()
-            if self.verbose: print "[*] STDERR thread started"
-            
+            logging.info("[*] STDERR thread started")
         except Exception as e:
-            if self.verbose: print "[!] Could not start STDERR thread"
+            logging.error("[!] Could not start STDERR thread")
         
     def test(self, cmd=None, argv=[]):
     
-        if cmd == None:
+        if cmd is None:
             cmd = self.cmd
         
         run_cmd = [os.path.join(self.bin_dir,cmd)] + argv		# Create full path to main binary
@@ -1427,12 +1326,10 @@ class HashcatWrapper(object):
         return self.get_RTCODE()
         
     def combinator(self, argv=[], TEST=False):
-
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
@@ -1449,29 +1346,25 @@ class HashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Combinator (1) attack"
+        logging.info("[*] Starting Combinator (1) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
         
     def toggle_case(self, argv=[], TEST=False):
-    
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
         try:
             argv.insert(0, self.words_files[0])
-        
         except IndexError as EmptyListError:
             return
         
@@ -1481,29 +1374,25 @@ class HashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Toggle-case (2) attack"
+        logging.info("[*] Starting Toggle-case (2) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
     
     def brute_force(self, argv=[], TEST=False):
-
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
         try:
             argv.insert(0, self.words_files[0])
-        
         except IndexError as EmptyListError:
             return
         
@@ -1513,29 +1402,25 @@ class HashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Brute-Force (3) attack"
+        logging.info("[*] Starting Brute-Force (3) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
 
     def permutation(self, argv=[], TEST=False):
-    
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
         try:
             argv.insert(0, self.words_files[0])
-        
         except IndexError as EmptyListError:
             return
         
@@ -1545,29 +1430,25 @@ class HashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Permutation (4) attack"
+        logging.info("[*] Starting Permutation (4) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
         
     def table_lookup(self, argv=[], TEST=False):
-        
         argv = self.build_args()
 
         if self.hash_type not in self.hash_type_dict.values():
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
         try:
             argv.insert(0, self.words_files[0])
-        
         except IndexError as EmptyListError:
             return
         
@@ -1577,59 +1458,42 @@ class HashcatWrapper(object):
         argv.insert(0, str(hash_code))
         argv.insert(0, "-m")
         
-        if self.verbose: print "[*] Starting Table-lookup (5) attack"
+        logging.info("[*] Starting Table-lookup (5) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
         
     def stop(self):
-    
         RTCODE = self.get_RTCODE()
         if self.is_running():
-        
-            if self.verbose: print "[*] Stopping background process...",
+            msg = "[*] Stopping background process... "
             try:
-                
                 self.hashcat.kill()
-                
-                if self.verbose: print "[Done]"
-                
-            except Exception as ProcessException: 
-            
+                logging.info(msg + "[Done]")
+            except Exception as ProcessException:
                 if not RTCODE in (-2,-1,0,2):
-                
-                    if self.verbose: 
-                    
-                        print "[PROCESS EXCEPTION]"
-                        print "\t** This could have happened for several reasons **"
-                        print "\t1. GOOD: Process successfully completed before stop call"
-                        print "\t2. BAD: Process failed to run initially (likely path or argv error)"
-                        print "\t3. UGLY: Unknown - Check your running processes for a zombie"
-                    
+                    logging.info("[PROCESS EXCEPTION]")
+                    logging.info("\t** This could have happened for several reasons **")
+                    logging.info("\t1. GOOD: Process successfully completed before stop call")
+                    logging.info("\t2. BAD: Process failed to run initially (likely path or argv error)")
+                    logging.info("\t3. UGLY: Unknown - Check your running processes for a zombie")
                 else:
-                    if self.verbose: print "[Done]"
-    
+                    logging.info("[Done]")
         
-        if self.verbose: print "[*] Program exited with code: " + str(RTCODE)
+        logging.info("[*] Program exited with code: " + str(RTCODE))
         
     def is_running(self):
-
-        if self.get_RTCODE() == None:		# Return value of None indicates process hasn't terminated
-            
+        if self.get_RTCODE() is None:		# Return value of None indicates process hasn't terminated
             return True
-        
         else:
             return False
     
-    
     def get_RTCODE(self):
-    
-        '''
+        """
         
         status codes on exit:
         =====================
@@ -1639,65 +1503,47 @@ class HashcatWrapper(object):
          1 = exhausted 
          2 = aborted
  
-        '''
-    
+        """
         try:
             return self.hashcat.poll()
-            
         except Exception as e:
             return -99          # Hasn't been started
     
-    
-    
     def find_code(self):	    # Find the hashcat hash code
-    
         try:
-            
             # Returns the first code that matches the type text
             return str(self.hash_type_dict[difflib.get_close_matches(self.hash_type, self.hash_type_dict.keys())[0]])
-        
         except Exception as CodeNotFoundError:
             return 0
         
         return 0			# Return default MD5
             
     def str_from_code(self, code):	# Reverse lookup find code from string
-    
         for code_str in self.hash_type_dict:
-        
             if str(code).lower() == str(self.hash_type_dict[code_str]).lower():
-            
                 if self.verbose: print "[*] " + str(code_str) + " = " + str(self.hash_type_dict[code_str])
                 return code_str
-        
         else:
             return "UNKNOWN"
-        
     
     def build_args(self):
-        
-        if self.verbose: print "[*] Building argv"
-        
+        logging.info("[*] Building argv")
+
         # Check if any defaults are changed
         argv = []
         
         for option in self.defaults_changed:
-            
             value = str(getattr(self, option))			# Get the value assigned to the option
             option = option.replace('_','-')			# Convert Python snake_style var to cmd line dash format
             
             if option in self.cmd_short_switch.keys():		# Use short switches if available
-            
-                if self.verbose: print "[*] Checking for short options"
+                logging.info("[*] Checking for short options")
                 option = "-" + self.cmd_short_switch[option]
                 argv.append(option)
                 argv.append(str(value))
-                
-            else: 
-            
+            else:
                 if option in self.cmd_equal_required:
                     argv.append("--" + option + "=" + str(value))
-                    
                 else:
                     argv.append("--" + option)
         
@@ -1705,14 +1551,11 @@ class HashcatWrapper(object):
         
 
     def clear_rules(self):
-    
         self.rules_files = []
         
     def clear_words(self):
-    
         self.words_files = []
 
 
 if __name__ == "__main__":
-
     pass
