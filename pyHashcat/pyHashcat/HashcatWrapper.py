@@ -420,7 +420,7 @@ class oclHashcatWrapper(object):
         self.defaults = copy.deepcopy({key:vars(self)[key] for key in vars(self) if key != 'restore_struct'})
         self.defaults_changed = []
         
-        if self.verbose: print "[*] Variables reset to defaults"
+        logging.info(print "[*] Variables reset to defaults")
         
     def get_restore_stats(self, restore_file_path=None):
         """
@@ -1168,7 +1168,7 @@ class HashcatWrapper(object):
             # Get cracked hashes
             with open(output_file_path, "rb") as output_file:
                 
-                if self.verbose: print "Reading output file: " + output_file_path
+                logging.info("Reading output file: " + output_file_path)
                 results = [record.rstrip('\n\r').rsplit(sep) for record in output_file.readlines()]
         
             if len(fields) == 0 and len(results) > 0 or len(results) > 0 and len(fields) != len(results[0]):
@@ -1233,7 +1233,7 @@ class HashcatWrapper(object):
             
         run_cmd = [os.path.join(self.bin_dir,cmd)] + argv		# Create full path to main binary
         
-        if self.verbose: print "[+] STDIN: " + ' '.join(run_cmd)
+        logging.info(print "[+] STDIN: " + ' '.join(run_cmd))
         
         self.hashcat = Popen(run_cmd, stdout=PIPE, stdin=PIPE, stderr=PIPE, bufsize=1, close_fds=ON_POSIX)
         
@@ -1256,23 +1256,22 @@ class HashcatWrapper(object):
             logging.info("[*] STDERR thread started")
         except Exception as e:
             logging.error("[!] Could not start STDERR thread")
-        
+
+
     def test(self, cmd=None, argv=[]):
-    
         if cmd is None:
             cmd = self.cmd
         
         run_cmd = [os.path.join(self.bin_dir,cmd)] + argv		# Create full path to main binary
         
         if run_cmd and not None in run_cmd:
-	  
-	  print "--------- Hashcat CMD Test ---------"
-	  print ' '.join(run_cmd)
-	  print "------------------------------------"
-	  
-	else:
-	  if self.verbose: print "[-] None type in string. Required option missing"
-        
+            print("--------- Hashcat CMD Test ---------")
+            print(' '.join(run_cmd))
+            print("------------------------------------")
+        else:
+            logging.warning("[-] None type in string. Required option missing")
+
+
     def straight(self, TEST=False):
 
         argv = self.build_args()
@@ -1296,34 +1295,33 @@ class HashcatWrapper(object):
         argv.insert(0, "-m")
         
         # Add rules if specified
-        if self.verbose: print "[*] (" + str(len(self.rules_files)) + ") Rules files specified. Verifying files..."
+        logging.info("[*] (" + str(len(self.rules_files)) + ") Rules files specified. Verifying files...")
         
         for rules in self.rules_files:
             
             if not os.path.isabs(rules): rules = os.path.join(self.bin_dir,rules)
             
             if os.path.isfile(rules):
-            
-                if self.verbose: print "\t[+] " + rules + " Found!"
+                logging.info("\t[+] " + rules + " Found!")
                 
                 argv.append("-r")
                 argv.append(rules)
         
             else:
             
-                if self.verbose: print "\t[-] " + rules + " NOT Found!"
+                logging.warning("\t[-] " + rules + " NOT Found!")
                 pass
         
         
-        if self.verbose: print "[*] Starting Straight (0) attack"
+        logging.info("[*] Starting Straight (0) attack")
         
         if TEST:
             self.test(argv=argv)
-        
         else:
             self.start(argv=argv)
         
         return self.get_RTCODE()
+
         
     def combinator(self, argv=[], TEST=False):
         argv = self.build_args()
@@ -1521,7 +1519,7 @@ class HashcatWrapper(object):
     def str_from_code(self, code):	# Reverse lookup find code from string
         for code_str in self.hash_type_dict:
             if str(code).lower() == str(self.hash_type_dict[code_str]).lower():
-                if self.verbose: print "[*] " + str(code_str) + " = " + str(self.hash_type_dict[code_str])
+                logging.info("[*] " + str(code_str) + " = " + str(self.hash_type_dict[code_str]))
                 return code_str
         else:
             return "UNKNOWN"
