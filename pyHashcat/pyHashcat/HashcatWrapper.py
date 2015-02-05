@@ -420,7 +420,7 @@ class oclHashcatWrapper(object):
         self.defaults = copy.deepcopy({key:vars(self)[key] for key in vars(self) if key != 'restore_struct'})
         self.defaults_changed = []
         
-        logging.info(print "[*] Variables reset to defaults")
+        logging.info("[*] Variables reset to defaults")
         
     def get_restore_stats(self, restore_file_path=None):
         """
@@ -1233,7 +1233,7 @@ class HashcatWrapper(object):
             
         run_cmd = [os.path.join(self.bin_dir,cmd)] + argv		# Create full path to main binary
         
-        logging.info(print "[+] STDIN: " + ' '.join(run_cmd))
+        logging.info("[+] STDIN: " + ' '.join(run_cmd))
         
         self.hashcat = Popen(run_cmd, stdout=PIPE, stdin=PIPE, stderr=PIPE, bufsize=1, close_fds=ON_POSIX)
         
