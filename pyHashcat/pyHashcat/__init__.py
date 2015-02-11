@@ -1,1 +1,1 @@
-from HashcatWrapper import *
+from .HashcatWrapper import *

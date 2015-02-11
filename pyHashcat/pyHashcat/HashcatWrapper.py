@@ -48,7 +48,7 @@ from threading import Thread
 import struct
 import logging
 from collections import namedtuple, OrderedDict
-from Queue import Queue, Empty
+from queue import Queue, Empty
 from subprocess import Popen,PIPE
 from pprint import pprint	
 ON_POSIX = 'posix' in sys.builtin_module_names
@@ -450,7 +450,7 @@ class oclHashcatWrapper(object):
 
                 struct_tuple = namedtuple('struct_tuple', 'version_bin cwd pid dictpos maskpos pw_cur argc argv_pointer argv')
                 struct_tuple = struct_tuple._make(struct.unpack(fmt, self.restore_struct))
-                self.stats = OrderedDict(zip(struct_tuple._fields, struct_tuple))
+                self.stats = OrderedDict(list(zip(struct_tuple._fields, struct_tuple)))
                 self.stats['cwd'] = self.stats['cwd'].rstrip('\0')
 
                 try:
@@ -489,7 +489,7 @@ class oclHashcatWrapper(object):
                 if len(fields) == len(results[0]):
             
                     # Returns a list of dictionary objects with fields mapped to variables
-                    return [dict(zip(fields, record)) for record in results]
+                    return [dict(list(zip(fields, record))) for record in results]
                     
             else:
             
@@ -535,7 +535,7 @@ class oclHashcatWrapper(object):
         if self.hashcat is not None and self.is_running():
             self.stop()
             
-        run_cmd = [os.path.join(self.bin_dir,cmd)] + argv		# Create full path to main binary
+        run_cmd = [os.path.join(self.bin_dir, cmd)] + argv		# Create full path to main binary
         
         logging.info("[+] STDIN: " + ' '.join(run_cmd))
         
@@ -570,7 +570,7 @@ class oclHashcatWrapper(object):
         
         if run_cmd and not None in run_cmd:
             print("--------- Hashcat CMD Test ---------")
-            print(' '.join(run_cmd))
+            print((' '.join(run_cmd)))
             print("------------------------------------")
         else:
             logging.info("[-] None type in string. Required option missing")
@@ -579,7 +579,7 @@ class oclHashcatWrapper(object):
     def straight(self, TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -622,7 +622,7 @@ class oclHashcatWrapper(object):
     def combinator(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -652,7 +652,7 @@ class oclHashcatWrapper(object):
     def brute_force(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -681,7 +681,7 @@ class oclHashcatWrapper(object):
     def hybrid_dict_mask(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -719,7 +719,7 @@ class oclHashcatWrapper(object):
     def hybrid_mask_dict(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -802,7 +802,7 @@ class oclHashcatWrapper(object):
     def find_code(self):	# Find the hashcat hash code
         try:
             # Returns the first code that matches the type text
-            return str(self.hash_type_dict[difflib.get_close_matches(self.hash_type, self.hash_type_dict.keys())[0]])
+            return str(self.hash_type_dict[difflib.get_close_matches(self.hash_type, list(self.hash_type_dict.keys()))[0]])
         except Exception as CodeNotFoundError:
             return 0
 
@@ -827,7 +827,7 @@ class oclHashcatWrapper(object):
             value = str(getattr(self, option))			# Get the value assigned to the option
             option = option.replace('_','-')			# Convert Python snake_style var to cmd line dash format
             
-            if option in self.cmd_short_switch.keys():		# Use short switches if available
+            if option in list(self.cmd_short_switch.keys()):		# Use short switches if available
                 logging.info("[*] Checking for short options")
                 option = "-" + self.cmd_short_switch[option]
                 argv.append(option)
@@ -1181,7 +1181,7 @@ class HashcatWrapper(object):
                 if len(fields) == len(results[0]):
             
                     # Returns a list of dictionary objects with fields mapped to variables
-                    return [dict(zip(fields, record)) for record in results]
+                    return [dict(list(zip(fields, record))) for record in results]
                     
             else:
             
@@ -1266,19 +1266,17 @@ class HashcatWrapper(object):
         
         if run_cmd and not None in run_cmd:
             print("--------- Hashcat CMD Test ---------")
-            print(' '.join(run_cmd))
+            print((' '.join(run_cmd)))
             print("------------------------------------")
         else:
             logging.warning("[-] None type in string. Required option missing")
 
 
     def straight(self, TEST=False):
-
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
-        
         else:
             hash_code = self.hash_type
         
@@ -1326,7 +1324,7 @@ class HashcatWrapper(object):
     def combinator(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -1356,7 +1354,7 @@ class HashcatWrapper(object):
     def toggle_case(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -1384,7 +1382,7 @@ class HashcatWrapper(object):
     def brute_force(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -1412,7 +1410,7 @@ class HashcatWrapper(object):
     def permutation(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -1440,7 +1438,7 @@ class HashcatWrapper(object):
     def table_lookup(self, argv=[], TEST=False):
         argv = self.build_args()
 
-        if self.hash_type not in self.hash_type_dict.values():
+        if self.hash_type not in list(self.hash_type_dict.values()):
             hash_code = self.find_code()
         else:
             hash_code = self.hash_type
@@ -1510,7 +1508,7 @@ class HashcatWrapper(object):
     def find_code(self):	    # Find the hashcat hash code
         try:
             # Returns the first code that matches the type text
-            return str(self.hash_type_dict[difflib.get_close_matches(self.hash_type, self.hash_type_dict.keys())[0]])
+            return str(self.hash_type_dict[difflib.get_close_matches(self.hash_type, list(self.hash_type_dict.keys()))[0]])
         except Exception as CodeNotFoundError:
             return 0
         
@@ -1534,7 +1532,7 @@ class HashcatWrapper(object):
             value = str(getattr(self, option))			# Get the value assigned to the option
             option = option.replace('_','-')			# Convert Python snake_style var to cmd line dash format
             
-            if option in self.cmd_short_switch.keys():		# Use short switches if available
+            if option in list(self.cmd_short_switch.keys()):		# Use short switches if available
                 logging.info("[*] Checking for short options")
                 option = "-" + self.cmd_short_switch[option]
                 argv.append(option)
